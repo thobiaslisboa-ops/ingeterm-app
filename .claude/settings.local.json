@@ -12,7 +12,9 @@
       "Bash(flutter analyze:*)",
       "Bash(flutter build *)",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\thobi\\\\AplicacionVS\\\\mantencion_valvulas\" -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(not exist *)",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \".github\\\\workflows\")"
     ]
   }
 }
