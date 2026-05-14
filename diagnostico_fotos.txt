@@ -1,0 +1,668 @@
+================================================================================
+DIAGNÓSTICO COMPLETO — SISTEMA DE FOTOS
+Fecha: 2026-03-31
+Proyecto: mantencion_valvulas
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PASO 1 — CÓDIGO DE UPLOAD POR PANTALLA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+──────────────────────────────────────────────────────────────────────────────
+1. equipment_detail_screen.dart — _addEquipmentPhoto()  [línea ~221]
+──────────────────────────────────────────────────────────────────────────────
+
+  Future<void> _addEquipmentPhoto(ImageSource source) async {
+    final image = await picker.pickImage(source: source, imageQuality: 80);
+    if (image == null || !mounted) return;
+    setState(() => _isUploadingPhoto = true);
+    try {
+      final bytes = await image.readAsBytes();
+      final compressed = await FlutterImageCompress.compressWithList(
+        bytes,
+        minWidth: 1200,
+        minHeight: 1200,
+        quality: 80,
+      );
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final ref = FirebaseStorage.instance
+          .ref('equipos/${widget.equipmentId}/fotos/$fileName');
+      await ref.putData(compressed,
+          SettableMetadata(contentType: 'image/jpeg'));
+      final url = await ref.getDownloadURL();
+      await _equipmentRef.update({
+        'photoUrls': FieldValue.arrayUnion([url]),
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al subir foto: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingPhoto = false);
+    }
+  }
+
+  Storage path : equipos/{equipmentId}/fotos/{timestamp}.jpg
+  Método       : putData (bytes en memoria)
+  Compresión   : compressWithList ✓
+  Metadata     : SettableMetadata(contentType: 'image/jpeg') ✓
+  Campo Firestore: 'photoUrls' arrayUnion
+  Timeout      : ✗ NO tiene
+  Soporte offline: ✗ NO tiene
+
+
+──────────────────────────────────────────────────────────────────────────────
+2. valve_detail_screen.dart — _pickAndUpload()  [línea 175]
+──────────────────────────────────────────────────────────────────────────────
+
+  Future<void> _pickAndUpload(ImageSource source) async {
+    final file = await _picker.pickImage(source: source, imageQuality: 85);
+    if (file == null || !mounted) return;
+
+    setState(() => _isUploadingPhoto = true);
+    try {
+      final bytes = await file.readAsBytes();
+      final compressed = await FlutterImageCompress.compressWithList(
+        bytes,
+        minWidth: 1200,
+        minHeight: 1200,
+        quality: 80,
+      );
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final ref =
+          _storage.ref('valvulas/${widget.valveId}/fotos/$fileName');
+      await ref.putData(compressed);        // ← SIN SettableMetadata ⚠
+      final url = await ref.getDownloadURL();
+      await _valveRef.update({
+        'photoUrls': FieldValue.arrayUnion([url]),
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al subir foto: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingPhoto = false);
+    }
+  }
+
+  Storage path : valvulas/{valveId}/fotos/{timestamp}.jpg
+  Método       : putData (bytes en memoria)
+  Compresión   : compressWithList ✓
+  Metadata     : ✗ SIN SettableMetadata — content-type no definido ⚠
+  Campo Firestore: 'photoUrls' arrayUnion
+  Timeout      : ✗ NO tiene
+  Soporte offline: ✗ NO tiene
+
+
+──────────────────────────────────────────────────────────────────────────────
+3. component_detail_screen.dart — función inline  [línea ~265]
+──────────────────────────────────────────────────────────────────────────────
+
+  // (fragmento del método de upload)
+  final image = await _picker.pickImage(source: source, imageQuality: 80);
+  if (image == null || !mounted) return;
+  setState(() => _isUploadingPhoto = true);
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    Uint8List bytes;
+    bool fileExists = false;
+    try {
+      fileExists = image.path.isNotEmpty && await File(image.path).exists();
+    } catch (_) {}
+
+    if (fileExists) {
+      final compressed = await FlutterImageCompress.compressWithFile(
+        image.path,
+        quality: 80,
+        minWidth: 1200,
+        minHeight: 900,
+      );
+      bytes = compressed != null
+          ? Uint8List.fromList(compressed)
+          : await image.readAsBytes();
+    } else {
+      bytes = await image.readAsBytes();
+    }
+
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final ref = FirebaseStorage.instance.ref(
+        'equipos/${widget.equipmentId}/componentes/${widget.componentId}/fotos/$fileName');
+
+    final uploadTask = ref.putData(
+        bytes, SettableMetadata(contentType: 'image/jpeg'));
+    await uploadTask.timeout(
+      const Duration(seconds: 90),
+      onTimeout: () {
+        uploadTask.cancel();
+        throw TimeoutException('Timeout al subir foto');
+      },
+    );
+    final url = await ref.getDownloadURL();
+
+    await _docRef.update({
+      'fotos': FieldValue.arrayUnion([url]),
+    });
+  } catch (e) {
+    ...
+  } finally {
+    if (mounted) setState(() => _isUploadingPhoto = false);
+  }
+
+  Storage path : equipos/{equipmentId}/componentes/{componentId}/fotos/{timestamp}.jpg
+  Método       : putData (bytes en memoria)
+  Compresión   : compressWithFile + fallback a readAsBytes ✓
+  Metadata     : SettableMetadata(contentType: 'image/jpeg') ✓
+  Campo Firestore: 'fotos' arrayUnion
+  Timeout      : ✓ 90 segundos
+  Soporte offline: ✗ NO tiene
+
+
+──────────────────────────────────────────────────────────────────────────────
+4. hydro_test_detail_screen.dart — _uploadImage()  [línea ~258]
+──────────────────────────────────────────────────────────────────────────────
+
+  // Fragmento de _uploadImage(XFile image, String? testId)
+  try {
+    final connectivity = Connectivity();
+    final result = await connectivity.checkConnectivity();
+    if (result.contains(ConnectivityResult.none)) {
+      if (testId != null) {
+        await ImageSyncService().addPendingImage(
+          imagePath: image.path,
+          folder: 'pruebas_hidro',
+          entityId: widget.equipmentId,
+          documentPath:
+              'clients/${widget.clientId}/equipments/${widget.equipmentId}/hydraulicTests/$testId',
+          fieldName: 'fotos',
+        );
+      }
+      return 'PENDING_SYNC';
+    }
+    final file = File(image.path);
+    final compressed = await FlutterImageCompress.compressAndGetFile(
+      file.absolute.path,
+      '${file.parent.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      quality: 80,
+      format: CompressFormat.jpeg,
+    );
+    final toUpload = compressed != null ? File(compressed.path) : file;
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}_${image.name}';
+    final ref = FirebaseStorage.instance
+        .ref()
+        .child('equipos/${widget.equipmentId}/pruebas_hidro/$fileName');
+    final task = ref.putFile(
+      toUpload,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
+    await task.timeout(
+      const Duration(seconds: 90),
+      onTimeout: () {
+        task.cancel();
+        throw TimeoutException('Timeout subiendo imagen');
+      },
+    );
+    final url = await ref.getDownloadURL();
+    try {
+      if (compressed != null) await File(compressed.path).delete();
+    } catch (_) {}
+    return url;
+  } catch (e) {
+    print('Error subiendo imagen: $e');
+    return null;
+  }
+
+  Storage path : equipos/{equipmentId}/pruebas_hidro/{timestamp}_{name}
+  Método       : putFile (archivo en disco)
+  Compresión   : compressAndGetFile ✓
+  Metadata     : SettableMetadata(contentType: 'image/jpeg') ✓
+  Campo Firestore: 'fotos' arrayUnion
+  Timeout      : ✓ 90 segundos
+  Soporte offline: ✓ USA ImageSyncService (única pantalla que lo usa correctamente)
+  Verifica conectividad: result.contains(ConnectivityResult.none) ✓
+
+
+──────────────────────────────────────────────────────────────────────────────
+5. maintenance_detail_screen.dart — usa PhotoManagerWidget  [línea ~575]
+──────────────────────────────────────────────────────────────────────────────
+
+  PhotoManagerWidget(
+    urls: m.fotos,
+    storagePath: 'maintenances/${m.id}/fotos',
+    docRef: _maintenanceRef,
+    fieldName: 'fotos',
+    offlineFolder: 'maintenances',
+    offlineEntityId: m.id,
+    imageSize: 130,
+    onStatusChange: (status) {
+      switch (status.state) {
+        case PhotoUploadState.uploading:
+          _syncController.showUploading();
+          break;
+        case PhotoUploadState.done:
+          ...
+          break;
+        case PhotoUploadState.offlineQueued:
+          _syncController.showOffline(
+              message: 'Sin conexión — la foto se subirá al reconectar');
+          break;
+        case PhotoUploadState.idle:
+          break;
+      }
+    },
+  )
+
+  >> Delega todo a PhotoManagerWidget (ver código completo en widget_photo_manager más abajo)
+  Storage path : maintenances/{m.id}/fotos/{timestamp}.jpg
+  Método       : putFile (en PhotoManagerWidget)
+  Compresión   : compressAndGetFile ✓
+  Metadata     : SettableMetadata(contentType: 'image/jpeg') ✓
+  Campo Firestore: 'fotos' arrayUnion
+  Timeout      : ✓ 90 segundos
+  Soporte offline: ✓ usa ImageSyncService + progress tracking
+  Es el más completo de todas las pantallas
+
+
+──────────────────────────────────────────────────────────────────────────────
+6. maintenance_item_screen.dart — _subirFoto()  [línea 507]
+──────────────────────────────────────────────────────────────────────────────
+
+  Future<void> _subirFoto(MaintenanceItemModel item) async {
+    final source = await _pickImageSource();
+    if (source == null) return;
+    final xFile = await _picker.pickImage(
+        source: source, imageQuality: 75, maxWidth: 1600);
+    if (xFile == null) return;
+
+    setState(() => _subiendoFoto = true);
+    try {
+      final file = File(xFile.path);
+      final nombre = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final ref = _storage.ref(
+          'maintenances/${widget.maintenanceId}/items/${item.id}/fotos/$nombre');
+      await ref.putFile(file);          // ← SIN SettableMetadata ⚠
+                                        // ← SIN timeout ⚠
+                                        // ← SIN compresión real ⚠
+      final url = await ref.getDownloadURL();
+      await _itemRef.update({
+        'fotos': FieldValue.arrayUnion([url]),
+      });
+    } catch (e) {
+      _showSnack('Error al subir foto: $e');
+    } finally {
+      if (mounted) setState(() => _subiendoFoto = false);
+    }
+  }
+
+  Storage path : maintenances/{maintenanceId}/items/{item.id}/fotos/{timestamp}.jpg
+  Método       : putFile (archivo en disco)
+  Compresión   : ✗ SOLO imageQuality:75 del picker, sin flutter_image_compress ⚠
+  Metadata     : ✗ SIN SettableMetadata ⚠
+  Campo Firestore: 'fotos' arrayUnion
+  Timeout      : ✗ NO tiene ⚠
+  Soporte offline: ✗ NO tiene ⚠
+
+
+──────────────────────────────────────────────────────────────────────────────
+WIDGET COMPARTIDO: photo_manager_widget.dart — _addPhoto()  [línea 244]
+(usado por maintenance_detail_screen)
+──────────────────────────────────────────────────────────────────────────────
+
+  Future<void> _addPhoto() async {
+    final source = await _pickSource();
+    if (source == null) return;
+
+    final xFile = await _picker.pickImage(source: source);
+    if (xFile == null) return;
+
+    // Verificar conexión
+    final conn = await Connectivity().checkConnectivity();
+    final isOnline = !conn.every((r) => r == ConnectivityResult.none);
+
+    if (!isOnline) {
+      // Sin conexión → cola de sincronización
+      await ImageSyncService().addPendingImage(
+        imagePath: xFile.path,
+        folder: widget.offlineFolder,
+        entityId: widget.offlineEntityId,
+        documentPath: widget.docRef.path,
+        fieldName: widget.fieldName,
+      );
+      _setStatus(PhotoUploadState.offlineQueued);
+      return;
+    }
+
+    _setStatus(PhotoUploadState.uploading, progress: 0);
+
+    try {
+      final file = File(xFile.path);
+
+      final compressed = await FlutterImageCompress.compressAndGetFile(
+        file.absolute.path,
+        '${file.parent.path}/cmp_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        quality: 80,
+        minWidth: 1280,
+        format: CompressFormat.jpeg,
+      );
+      final toUpload = compressed != null ? File(compressed.path) : file;
+
+      final nombre = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final storageRef = FirebaseStorage.instance
+          .ref('${widget.storagePath}/$nombre');
+      final task = storageRef.putFile(
+        toUpload,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+
+      task.snapshotEvents.listen((snap) {
+        if (snap.totalBytes > 0 && mounted) {
+          setState(() => _progress = snap.bytesTransferred / snap.totalBytes);
+        }
+      });
+
+      await task.timeout(
+        const Duration(seconds: 90),
+        onTimeout: () {
+          task.cancel();
+          throw TimeoutException('Timeout subiendo imagen');
+        },
+      );
+
+      final url = await storageRef.getDownloadURL();
+
+      await widget.docRef.update({
+        widget.fieldName: FieldValue.arrayUnion([url]),
+      });
+
+      try {
+        if (compressed != null) await File(compressed.path).delete();
+      } catch (_) {}
+
+      _setStatus(PhotoUploadState.done);
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) _setStatus(PhotoUploadState.idle);
+    } catch (e) {
+      _setStatus(PhotoUploadState.error);
+    }
+  }
+
+  Verifica conectividad: conn.every((r) => r == ConnectivityResult.none) ✓
+  Método       : putFile ✓
+  Compresión   : compressAndGetFile ✓
+  Metadata     : SettableMetadata(contentType: 'image/jpeg') ✓
+  Timeout      : ✓ 90 segundos
+  Progress     : ✓ tracking con snapshotEvents
+  Soporte offline: ✓ ImageSyncService
+  ESTE ES EL PATRÓN CORRECTO
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PASO 2 — FIREBASE STORAGE RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  NO EXISTE storage.rules en el repositorio local.
+
+  El archivo firebase.json solo contiene configuración de app IDs:
+  {
+    "flutter": {
+      "platforms": {
+        "android": { ... },
+        "dart": { "lib/firebase_options.dart": { ... } }
+      }
+    }
+  }
+
+  No hay sección "storage" ni ruta a storage.rules.
+
+  Las reglas están ÚNICAMENTE en la consola de Firebase.
+  Para revisarlas: Firebase Console → Storage → Rules
+
+  RIESGO: Si las reglas requieren autenticación (auth != null) y el usuario
+  no está autenticado, TODOS los uploads fallarán con "permission-denied".
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PASO 3 — VERSIONES DE PACKAGES (pubspec.yaml)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Firebase
+  firebase_core:     ^2.24.2
+  cloud_firestore:   ^4.13.6
+  firebase_storage:  ^11.6.5
+
+  Compatibilidad Firebase: firebase_storage 11.x requiere firebase_core 2.x ✓
+  Las tres versiones son del mismo BoM (Bill of Materials) 2.x → compatibles.
+
+  # Imágenes
+  image_picker:           ^1.0.5
+  flutter_image_compress: ^2.3.0
+  cached_network_image:   ^3.3.1
+
+  # Conectividad
+  connectivity_plus: ^7.0.0   ← BREAKING CHANGE CRÍTICO (ver PASO 4)
+
+  # Base de datos local
+  sqflite:       ^2.3.0
+  path_provider: ^2.1.0
+
+  # Otras
+  uuid:      ^4.0.0
+  intl:      ^0.18.1
+  pdf:       ^3.10.7
+  printing:  ^5.11.0
+  share_plus: ^7.2.1
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PASO 4 — IMAGE SYNC SERVICE COMPLETO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Archivo: lib/services/image_sync_service.dart
+
+  // ── Modelo PendingImage ──────────────────────────────────────────────────
+  class PendingImage {
+    final int? id;
+    final String imagePath;
+    final String folder;       // 'equipment', 'hydraulic_tests', etc
+    final String entityId;     // ID del equipo, válvula, etc
+    final String documentPath; // Ruta en Firestore
+    final String? fieldName;   // Campo Firestore ('photoUrls', etc)
+    final DateTime createdAt;
+    final bool isCompressed;
+    ...
+  }
+
+  // ── Servicio Singleton ───────────────────────────────────────────────────
+  class ImageSyncService {
+    static final ImageSyncService _instance = ImageSyncService._internal();
+    static Database? _database;
+    bool _isSyncing = false;
+
+    // Base de datos SQLite local
+    Future<Database> _getDatabase() async {
+      // Crea tabla: pending_images (id, imagePath, folder, entityId,
+      //             documentPath, fieldName, createdAt, isCompressed)
+    }
+
+    // Agrega imagen a la cola
+    Future<void> addPendingImage({
+      required String imagePath,
+      required String folder,
+      required String entityId,
+      required String documentPath,
+      String? fieldName,
+    }) async {
+      final db = await _getDatabase();
+      await db.insert('pending_images', pending.toMap());
+      await trySyncPendingImages();  // Intenta sincronizar inmediatamente
+    }
+
+    // Verifica conexión e intenta sincronizar
+    Future<void> trySyncPendingImages() async {
+      if (_isSyncing) return;
+
+      final connectivity = Connectivity();
+      final connectionStatus = await connectivity.checkConnectivity();
+
+      // ══════════════════════════════════════════════════════════════════════
+      // BUG CRÍTICO — LÍNEA 146:
+      // connectivity_plus v7 devuelve List<ConnectivityResult>, NO un valor.
+      // Esta comparación SIEMPRE es false → el guard nunca funciona.
+      // ══════════════════════════════════════════════════════════════════════
+      if (connectionStatus == ConnectivityResult.none) {  // ← SIEMPRE FALSE ⛔
+        return;
+      }
+
+      await _syncPendingImages();
+    }
+
+    // Sincroniza todas las imágenes pendientes
+    Future<void> _syncPendingImages() async {
+      if (_isSyncing) return;
+      _isSyncing = true;
+      try {
+        final pendingImages = await getPendingImages();
+        for (final pending in pendingImages) {
+          try {
+            final imageFile = File(pending.imagePath);
+            if (!imageFile.existsSync()) {
+              await removePendingImage(pending.id!);
+              continue;
+            }
+            // Comprimir
+            final compressedFile = await FlutterImageCompress.compressAndGetFile(
+              imageFile.absolute.path,
+              '${imageFile.parent.path}/compressed_${DateTime.now()...}.jpg',
+              quality: 80,
+              format: CompressFormat.jpeg,
+            );
+            final fileToUpload = compressedFile != null
+                ? File(compressedFile.path) : imageFile;
+
+            // Subir a Firebase Storage
+            final fileName = '${DateTime.now()...}_${basename(imageFile.path)...}';
+            final ref = FirebaseStorage.instance
+                .ref()
+                .child('${pending.folder}/${pending.entityId}/$fileName');
+
+            final uploadTask = ref.putFile(
+              fileToUpload,
+              SettableMetadata(contentType: 'image/jpeg'),
+            );
+
+            // Timeout de 90 segundos
+            await uploadTask.timeout(
+              const Duration(seconds: 90),
+              onTimeout: () {
+                uploadTask.cancel();
+                throw TimeoutException('Timeout subiendo imagen', ...);
+              },
+            );
+
+            final url = await ref.getDownloadURL();
+
+            // Actualizar Firestore
+            final docRef = FirebaseFirestore.instance.doc(pending.documentPath);
+            if (pending.fieldName != null) {
+              await docRef.update({
+                pending.fieldName!: FieldValue.arrayUnion([url])
+              });
+            }
+
+            await removePendingImage(pending.id!);
+
+            // Limpiar archivo comprimido temporal
+            try {
+              if (compressedFile != null)
+                await File(compressedFile.path).delete();
+            } catch (_) {}
+          } catch (_) {
+            continue;  // Si falla una imagen, sigue con la siguiente
+          }
+        }
+      } finally {
+        _isSyncing = false;
+      }
+    }
+
+    // Stream de conectividad (DEFINIDO pero NUNCA SUSCRITO en ningún lugar)
+    Stream<bool> get connectivityStream {
+      return Connectivity().onConnectivityChanged.map((results) {
+        return results.isNotEmpty &&
+          !results.every((r) => r == ConnectivityResult.none);
+      });
+    }
+  }
+
+  FLUJO COMPLETO:
+  addPendingImage() → guarda en SQLite → llama trySyncPendingImages()
+                                          ↓ (BUG: guard siempre false)
+                                         _syncPendingImages()
+                                          ↓
+                                         comprime → putFile → Firestore update
+                                          ↓
+                                         elimina de cola SQLite
+
+  PROBLEMA: connectivityStream nunca se suscribe → no hay re-intento automático
+  al reconectar. Solo se intenta al llamar addPendingImage() o manualmente.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RESUMEN DE BUGS Y PROBLEMAS ENCONTRADOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌─────┬────────────────────────────────────────────────────────┬───────────┐
+  │ #   │ Problema                                               │ Archivo   │
+  ├─────┼────────────────────────────────────────────────────────┼───────────┤
+  │ 1   │ BUG: checkConnectivity() == ConnectivityResult.none    │ image_    │
+  │     │ devuelve List en v7, comparación siempre false          │ sync_     │
+  │     │ → guard offline nunca funciona                          │ service   │
+  ├─────┼────────────────────────────────────────────────────────┼───────────┤
+  │ 2   │ putData() SIN SettableMetadata → content-type vacío    │ valve_    │
+  │     │ puede causar rechazo en Storage                         │ detail    │
+  ├─────┼────────────────────────────────────────────────────────┼───────────┤
+  │ 3   │ putFile() SIN SettableMetadata ni timeout               │ maint_    │
+  │     │                                                         │ item      │
+  ├─────┼────────────────────────────────────────────────────────┼───────────┤
+  │ 4   │ Sin timeout → upload puede colgarse indefinidamente     │ equipment │
+  │     │                                                         │ valve     │
+  │     │                                                         │ maint_item│
+  ├─────┼────────────────────────────────────────────────────────┼───────────┤
+  │ 5   │ Sin soporte offline                                     │ equipment │
+  │     │                                                         │ valve     │
+  │     │                                                         │ component │
+  │     │                                                         │ maint_item│
+  ├─────┼────────────────────────────────────────────────────────┼───────────┤
+  │ 6   │ maintenance_item: sin flutter_image_compress real       │ maint_    │
+  │     │ solo imageQuality del picker (menos efectivo)           │ item      │
+  ├─────┼────────────────────────────────────────────────────────┼───────────┤
+  │ 7   │ connectivityStream definido pero nunca suscrito          │ image_    │
+  │     │ → no hay re-intento reactivo al reconectar               │ sync_     │
+  │     │                                                         │ service   │
+  ├─────┼────────────────────────────────────────────────────────┼───────────┤
+  │ 8   │ Storage Rules no versionadas en repo                    │ (consola) │
+  │     │ → posible permission-denied si requiere auth             │           │
+  ├─────┼────────────────────────────────────────────────────────┼───────────┤
+  │ 9   │ Implementaciones completamente distintas en 5/6         │ todas     │
+  │     │ pantallas → difícil mantener y depurar                  │           │
+  └─────┴────────────────────────────────────────────────────────┴───────────┘
+
+  PATRÓN CORRECTO (ya implementado en maintenance_detail):
+  → Usar PhotoManagerWidget con putFile + SettableMetadata + timeout 90s
+    + compressAndGetFile + ImageSyncService con checkConnectivity() correcta
+
+  FIX MÍNIMO PRIORITARIO:
+  1. image_sync_service.dart línea 146:
+     ANTES: if (connectionStatus == ConnectivityResult.none)
+     DESPUÉS: if (connectionStatus.every((r) => r == ConnectivityResult.none))
+
+  2. Extender PhotoManagerWidget a todas las pantallas restantes
+     (equipment, valve, component, maintenance_item)
+
+================================================================================
+FIN DEL DIAGNÓSTICO
+================================================================================

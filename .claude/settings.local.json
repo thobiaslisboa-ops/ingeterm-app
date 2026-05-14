@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter pub:*)",
+      "Bash(wc -l ./lib/**/*.dart)",
+      "Bash(flutter run:*)",
+      "Bash(for d:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/thobi/AplicacionVS/mantencion_valvulas/android/app/src/main/res/**)",
+      "Bash(done)",
+      "Bash(dart analyze:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(flutter build *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\thobi\\\\AplicacionVS\\\\mantencion_valvulas\" -Directory)",
+      "Bash(Select-Object Name)"
+    ]
+  }
+}

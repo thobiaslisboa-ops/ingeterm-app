@@ -1,0 +1,67 @@
+name: maintenance_app
+description: Sistema de gestión de mantenciones para equipos industriales
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  
+  # Firebase
+  firebase_core: ^2.24.2
+  cloud_firestore: ^4.13.6
+  firebase_storage: ^11.6.5
+  firebase_auth: ^4.16.0
+
+  # Estado global
+  provider: ^6.1.1
+  
+  # Manejo de imágenes
+  image_picker: ^1.0.5
+  flutter_image_compress: ^2.3.0
+  cached_network_image: ^3.3.1
+  gal: ^1.3.0
+  
+  # Base de datos local
+  sqflite: ^2.3.0
+  path_provider: ^2.1.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  
+  # Conectividad
+  connectivity_plus: ^7.0.0
+  
+  # Utilidades
+  uuid: ^4.0.0
+  js: ^0.7.0
+  path: ^1.9.0
+  web: ^0.5.1
+  
+  # Formateo de fechas
+  intl: ^0.20.2
+  
+  # Generación y compartir PDFs
+  pdf: ^3.10.7
+  printing: ^5.11.0
+  share_plus: ^7.2.1
+
+  # UI
+  cupertino_icons: ^1.0.6
+  flutter_svg: ^2.0.9
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/

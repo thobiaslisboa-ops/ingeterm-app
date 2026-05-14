@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "921219036496",
+    "project_id": "mantenciones-ingeterm",
+    "storage_bucket": "mantenciones-ingeterm.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:921219036496:android:e13a6f28c81275bd1e6855",
+        "android_client_info": {
+          "package_name": "cl.mantencion.valvulas"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYkPHAJXHUrZMdvB2y-Kd23O14FmkpwCA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
