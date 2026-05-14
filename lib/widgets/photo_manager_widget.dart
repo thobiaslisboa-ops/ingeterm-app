@@ -189,18 +189,20 @@ class _PhotoManagerWidgetState extends State<PhotoManagerWidget> {
             },
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              // MEJORA 2: Image.network en web, CachedNetworkImage en móvil
+              // Web: <img> nativo no requiere CORS para renderizar.
+              // pointer-events:none permite que Flutter maneje gestos y botones.
               child: kIsWeb
-                  ? Image.network(
-                      url,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: Colors.red.shade50,
-                        child: const Center(
-                          child: Icon(Icons.broken_image_outlined,
-                              color: Colors.red, size: 32),
-                        ),
-                      ),
+                  ? HtmlElementView.fromTagName(
+                      tagName: 'img',
+                      onElementCreated: (Object element) {
+                        (element as dynamic)
+                          ..src = url
+                          ..setAttribute(
+                            'style',
+                            'width:100%;height:100%;'
+                            'object-fit:cover;pointer-events:none;',
+                          );
+                      },
                     )
                   : CachedNetworkImage(
                       imageUrl: url,
@@ -489,41 +491,38 @@ class _FullscreenGalleryState extends State<_FullscreenGallery> {
           controller: _pageController,
           itemCount: total,
           onPageChanged: (i) => setState(() => _currentIndex = i),
-          // MEJORA 2: Image.network en web, CachedNetworkImage en móvil
-          itemBuilder: (_, i) => InteractiveViewer(
-            minScale: 0.5,
-            maxScale: 5.0,
-            child: Center(
-              child: kIsWeb
-                  ? Image.network(
-                      widget.urls[i],
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Center(
-                        child: Icon(Icons.broken_image,
-                            color: Colors.white54, size: 64),
-                      ),
-                      loadingBuilder: (_, child, progress) =>
-                          progress == null
-                              ? child
-                              : const Center(
-                                  child: CircularProgressIndicator(
-                                      color: Colors.white),
-                                ),
-                    )
-                  : CachedNetworkImage(
+          // Web: <img> nativo (sin CORS). Móvil: CachedNetworkImage con zoom.
+          itemBuilder: (_, i) => kIsWeb
+              ? HtmlElementView.fromTagName(
+                  tagName: 'img',
+                  onElementCreated: (Object element) {
+                    (element as dynamic)
+                      ..src = widget.urls[i]
+                      ..setAttribute(
+                        'style',
+                        'max-width:100%;max-height:100%;'
+                        'object-fit:contain;pointer-events:none;',
+                      );
+                  },
+                )
+              : InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 5.0,
+                  child: Center(
+                    child: CachedNetworkImage(
                       imageUrl: widget.urls[i],
                       fit: BoxFit.contain,
                       placeholder: (_, __) => const Center(
-                        child:
-                            CircularProgressIndicator(color: Colors.white),
+                        child: CircularProgressIndicator(
+                            color: Colors.white),
                       ),
                       errorWidget: (_, __, ___) => const Center(
                         child: Icon(Icons.broken_image,
                             color: Colors.white54, size: 64),
                       ),
                     ),
-            ),
-          ),
+                  ),
+                ),
         ),
       ),
     );
