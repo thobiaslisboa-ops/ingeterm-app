@@ -661,6 +661,7 @@ class _ValveDetailScreenState extends State<ValveDetailScreen> {
       docRef: _valveRef,
       fieldName: 'photoUrls',
       entityId: widget.valveId,
+      entityName: v.tag?.isNotEmpty == true ? v.tag : v.name,
     );
   }
 

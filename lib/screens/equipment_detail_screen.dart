@@ -718,6 +718,7 @@ class _EquipmentDetailScreenState extends State<EquipmentDetailScreen>
       docRef: _equipmentRef,
       fieldName: 'photoUrls',
       entityId: widget.equipmentId,
+      entityName: e.name,
     );
   }
 

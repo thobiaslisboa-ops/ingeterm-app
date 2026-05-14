@@ -45,6 +45,9 @@ dependencies:
   # Formateo de fechas
   intl: ^0.20.2
   
+  # ZIP para descarga de fotos
+  archive: ^3.4.9
+
   # Generación y compartir PDFs
   pdf: ^3.10.7
   printing: ^5.11.0

@@ -654,6 +654,7 @@ class _MaintenanceDetailScreenState
         fieldName: 'fotos',
         entityId: m.id,
         imageSize: 130,
+        entityName: 'OT-${m.numeroOrden.toString().padLeft(4, '0')}',
         onStatusChange: (status) {
           switch (status.state) {
             case PhotoUploadState.uploading:
@@ -2560,6 +2561,7 @@ class _EditWorkItemSheetState extends State<_EditWorkItemSheet> {
                   fieldName: 'fotos',
                   entityId: widget.maintenanceId,
                   imageSize: 110,
+                  entityName: item.referenciaNombre,
                 ),
                 const SizedBox(height: 24),
 

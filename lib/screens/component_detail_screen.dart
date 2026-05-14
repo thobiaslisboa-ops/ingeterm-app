@@ -672,6 +672,7 @@ class _ComponentDetailScreenState extends State<ComponentDetailScreen> {
       docRef: _docRef,
       fieldName: 'fotos',
       entityId: widget.componentId!,
+      entityName: _nombreCtrl.text.isNotEmpty ? _nombreCtrl.text : null,
     );
   }
 

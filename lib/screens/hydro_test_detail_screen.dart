@@ -794,6 +794,7 @@ class _HydroTestDetailScreenState extends State<HydroTestDetailScreen> {
                 fieldName: 'fotos',
                 entityId: _effectiveTestId,
                 imageSize: 100,
+                entityName: widget.equipmentName,
               ),
             ],
           ),

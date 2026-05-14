@@ -72,6 +72,12 @@ class _MaintenancesScreenState extends State<MaintenancesScreen> {
                       final m = MaintenanceModel.fromFirestore(doc);
                       return MaintenanceCard(
                         maintenance: m,
+                        clienteNombre: m.clienteNombre.isNotEmpty
+                            ? m.clienteNombre
+                            : null,
+                        equipoNombre: m.equipoNombre.isNotEmpty
+                            ? m.equipoNombre
+                            : null,
                         onTap: () => _openDetail(m, doc.reference.path),
                       );
                     },

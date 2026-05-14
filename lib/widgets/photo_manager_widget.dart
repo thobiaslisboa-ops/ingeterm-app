@@ -12,6 +12,8 @@ import '../services/upload_queue_manager.dart';
 import 'photo_upload_item.dart';
 import 'src/photo_download_io.dart'
     if (dart.library.html) 'src/photo_download_web.dart';
+import 'src/photo_zip_io.dart'
+    if (dart.library.html) 'src/photo_zip_web.dart';
 
 // ── Tipos de estado general (backward-compat con maintenance_detail_screen) ──
 
@@ -45,6 +47,9 @@ class PhotoManagerWidget extends StatefulWidget {
   /// Tamaño en px de cada thumbnail. Default 120.
   final double imageSize;
 
+  /// Nombre para el ZIP descargado. Ej: 'Caldera_3'. Si null usa 'Ingeterm'.
+  final String? entityName;
+
   /// Callback opcional con estado global de la cola (para sync indicators).
   final void Function(PhotoUploadStatus)? onStatusChange;
 
@@ -56,6 +61,7 @@ class PhotoManagerWidget extends StatefulWidget {
     required this.fieldName,
     required this.entityId,
     this.imageSize = 120,
+    this.entityName,
     this.onStatusChange,
   });
 
@@ -67,6 +73,7 @@ class _PhotoManagerWidgetState extends State<PhotoManagerWidget> {
   final _picker = ImagePicker();
   StreamSubscription<List<UploadJob>>? _sub;
   List<UploadJob> _jobs = [];
+  bool _downloading = false;
 
   @override
   void initState() {
@@ -137,6 +144,30 @@ class _PhotoManagerWidgetState extends State<PhotoManagerWidget> {
             minimumSize: const Size(double.infinity, 40),
           ),
         ),
+
+        // Botón descargar todas las fotos (visible solo si hay fotos)
+        if (widget.urls.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          OutlinedButton.icon(
+            onPressed: _downloading ? null : _downloadAll,
+            icon: _downloading
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.download_outlined, size: 16),
+            label: Text(
+              _downloading
+                  ? 'Preparando descarga...'
+                  : 'Descargar todas las fotos',
+              style: const TextStyle(fontSize: 13),
+            ),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 40),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -158,24 +189,37 @@ class _PhotoManagerWidgetState extends State<PhotoManagerWidget> {
             },
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: CachedNetworkImage(
-                imageUrl: url,
-                fit: BoxFit.cover,
-                placeholder: (_, __) => Container(
-                  color: Colors.grey[200],
-                  child: const Center(
-                    child: Icon(Icons.image_outlined,
-                        color: Colors.grey, size: 32),
-                  ),
-                ),
-                errorWidget: (_, __, ___) => Container(
-                  color: Colors.red.shade50,
-                  child: const Center(
-                    child: Icon(Icons.broken_image_outlined,
-                        color: Colors.red, size: 32),
-                  ),
-                ),
-              ),
+              // MEJORA 2: Image.network en web, CachedNetworkImage en móvil
+              child: kIsWeb
+                  ? Image.network(
+                      url,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: Colors.red.shade50,
+                        child: const Center(
+                          child: Icon(Icons.broken_image_outlined,
+                              color: Colors.red, size: 32),
+                        ),
+                      ),
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: url,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        color: Colors.grey[200],
+                        child: const Center(
+                          child: Icon(Icons.image_outlined,
+                              color: Colors.grey, size: 32),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        color: Colors.red.shade50,
+                        child: const Center(
+                          child: Icon(Icons.broken_image_outlined,
+                              color: Colors.red, size: 32),
+                        ),
+                      ),
+                    ),
             ),
           ),
           Positioned(
@@ -252,19 +296,59 @@ class _PhotoManagerWidgetState extends State<PhotoManagerWidget> {
     });
   }
 
+  // MEJORA 1: abre el visor como Dialog en lugar de ruta nueva
   void _openGallery(List<String> urls, int initialIndex) {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        opaque: false,
-        barrierColor: Colors.black,
-        pageBuilder: (_, __, ___) => _FullscreenGallery(
-          urls: urls,
-          initialIndex: initialIndex,
-        ),
-        transitionsBuilder: (_, animation, __, child) =>
-            FadeTransition(opacity: animation, child: child),
+    showDialog(
+      context: context,
+      useSafeArea: false,
+      barrierColor: Colors.black,
+      builder: (_) => _FullscreenGallery(
+        urls: urls,
+        initialIndex: initialIndex,
       ),
     );
+  }
+
+  // MEJORA 3: descarga ZIP de todas las fotos
+  Future<void> _downloadAll() async {
+    if (!kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Usa el visor para guardar fotos individualmente'),
+        ),
+      );
+      return;
+    }
+    setState(() => _downloading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Preparando descarga...'),
+        duration: Duration(seconds: 60),
+      ),
+    );
+    try {
+      final fecha = DateTime.now().toIso8601String().substring(0, 10);
+      final base = (widget.entityName ?? 'Ingeterm')
+          .replaceAll(RegExp(r'[^\w\s\-]'), '')
+          .replaceAll(' ', '_');
+      await downloadAllPhotos(widget.urls, '${base}_$fecha.zip');
+      messenger.clearSnackBars();
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Descarga iniciada'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 3),
+      ));
+    } catch (e) {
+      messenger.clearSnackBars();
+      messenger.showSnackBar(SnackBar(
+        content: Text('Error al descargar: $e'),
+        backgroundColor: Colors.red,
+      ));
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
   }
 
   Future<ImageSource?> _pickSource() => showModalBottomSheet<ImageSource>(
@@ -382,14 +466,16 @@ class _FullscreenGalleryState extends State<_FullscreenGallery> {
                   tooltip: kIsWeb ? 'Descargar' : 'Guardar en galería',
                   onPressed: () => _saveToDevice(url),
                 ),
-          // Botón compartir
-          _sharing
-              ? const _SpinnerAction()
-              : IconButton(
-                  icon: const Icon(Icons.share_outlined, color: Colors.white),
-                  tooltip: 'Compartir',
-                  onPressed: () => _share(url),
-                ),
+          // Botón compartir (solo en móvil)
+          if (!kIsWeb)
+            _sharing
+                ? const _SpinnerAction()
+                : IconButton(
+                    icon:
+                        const Icon(Icons.share_outlined, color: Colors.white),
+                    tooltip: 'Compartir',
+                    onPressed: () => _share(url),
+                  ),
         ],
       ),
       body: GestureDetector(
@@ -403,21 +489,39 @@ class _FullscreenGalleryState extends State<_FullscreenGallery> {
           controller: _pageController,
           itemCount: total,
           onPageChanged: (i) => setState(() => _currentIndex = i),
+          // MEJORA 2: Image.network en web, CachedNetworkImage en móvil
           itemBuilder: (_, i) => InteractiveViewer(
             minScale: 0.5,
             maxScale: 5.0,
             child: Center(
-              child: CachedNetworkImage(
-                imageUrl: widget.urls[i],
-                fit: BoxFit.contain,
-                placeholder: (_, __) => const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                ),
-                errorWidget: (_, __, ___) => const Center(
-                  child: Icon(Icons.broken_image,
-                      color: Colors.white54, size: 64),
-                ),
-              ),
+              child: kIsWeb
+                  ? Image.network(
+                      widget.urls[i],
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Center(
+                        child: Icon(Icons.broken_image,
+                            color: Colors.white54, size: 64),
+                      ),
+                      loadingBuilder: (_, child, progress) =>
+                          progress == null
+                              ? child
+                              : const Center(
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white),
+                                ),
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: widget.urls[i],
+                      fit: BoxFit.contain,
+                      placeholder: (_, __) => const Center(
+                        child:
+                            CircularProgressIndicator(color: Colors.white),
+                      ),
+                      errorWidget: (_, __, ___) => const Center(
+                        child: Icon(Icons.broken_image,
+                            color: Colors.white54, size: 64),
+                      ),
+                    ),
             ),
           ),
         ),
@@ -433,7 +537,9 @@ class _FullscreenGalleryState extends State<_FullscreenGallery> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(ok
-              ? kIsWeb ? 'Descarga iniciada' : 'Guardado en galería'
+              ? kIsWeb
+                  ? 'Descarga iniciada'
+                  : 'Guardado en galería'
               : 'Error al guardar'),
           backgroundColor: ok ? Colors.green : Colors.red,
           duration: const Duration(seconds: 2),
@@ -488,7 +594,8 @@ class _SpinnerAction extends StatelessWidget {
         child: SizedBox(
           width: 20,
           height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+          child:
+              CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
         ),
       );
 }

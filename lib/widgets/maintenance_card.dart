@@ -100,6 +100,29 @@ class MaintenanceCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+              // ── Cliente / Equipo ──
+              if (equipoNombre != null || clienteNombre != null) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on_outlined,
+                        size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        [
+                          if (clienteNombre != null) clienteNombre!,
+                          if (equipoNombre != null) equipoNombre!,
+                        ].join(' → '),
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey[600]),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               if (maintenance.tiposTrabajo.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Wrap(
@@ -129,28 +152,6 @@ class MaintenanceCard extends StatelessWidget {
                       .toList(),
                 ),
               ],
-              const SizedBox(height: 6),
-              // ── Cliente / Equipo ──
-              if (equipoNombre != null || clienteNombre != null)
-                Row(
-                  children: [
-                    const Icon(Icons.precision_manufacturing_outlined,
-                        size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        [
-                          if (clienteNombre != null) clienteNombre!,
-                          if (equipoNombre != null) equipoNombre!,
-                        ].join(' · '),
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.grey[600]),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
               const SizedBox(height: 8),
               // ── Fila inferior: fecha + duración + % items ──
               Row(
