@@ -45,6 +45,9 @@ dependencies:
   # Formateo de fechas
   intl: ^0.20.2
   
+  # HTTP para Firebase Auth REST API
+  http: ^1.2.0
+
   # ZIP para descarga de fotos
   archive: ^3.4.9
 

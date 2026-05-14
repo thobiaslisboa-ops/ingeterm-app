@@ -54,3 +54,18 @@ Future<void> downloadAllPhotos(List<String> urls, String fileName) async {
     ..click();
   web.URL.revokeObjectURL(url);
 }
+
+Future<void> downloadSinglePhoto(String url, String fileName) async {
+  final bytes = await _fetchBytes(url);
+  final uint8 = Uint8List.fromList(bytes);
+  final blob = web.Blob(
+    [uint8.toJS as web.BlobPart].toJS,
+    web.BlobPropertyBag(type: 'image/jpeg'),
+  );
+  final blobUrl = web.URL.createObjectURL(blob);
+  (web.document.createElement('a') as web.HTMLAnchorElement)
+    ..href = blobUrl
+    ..setAttribute('download', fileName)
+    ..click();
+  web.URL.revokeObjectURL(blobUrl);
+}

@@ -19,6 +19,7 @@ class MaintenancesScreen extends StatefulWidget {
 class _MaintenancesScreenState extends State<MaintenancesScreen> {
   final _db = FirebaseFirestore.instance;
   EstadoMantencion? _filtroEstado;
+  String? _filtroClienteId;
 
   Stream<QuerySnapshot> get _streamFiltrado {
     return _db
@@ -39,6 +40,7 @@ class _MaintenancesScreenState extends State<MaintenancesScreen> {
       ),
       body: Column(
         children: [
+          _buildClienteSelector(),
           _buildFiltros(),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
@@ -54,12 +56,14 @@ class _MaintenancesScreenState extends State<MaintenancesScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final allDocs = snap.data!.docs;
-                final docs = _filtroEstado == null
-                    ? allDocs
-                    : allDocs.where((d) {
-                        final data = d.data() as Map<String, dynamic>;
-                        return data['estado'] == _filtroEstado!.value;
-                      }).toList();
+                final docs = allDocs.where((d) {
+                  final data = d.data() as Map<String, dynamic>;
+                  final matchesEstado = _filtroEstado == null ||
+                      data['estado'] == _filtroEstado!.value;
+                  final matchesCliente = _filtroClienteId == null ||
+                      data['clienteId'] == _filtroClienteId;
+                  return matchesEstado && matchesCliente;
+                }).toList();
                 if (docs.isEmpty) return _buildEmpty();
                 return RefreshIndicator(
                   onRefresh: () async => setState(() {}),
@@ -94,6 +98,45 @@ class _MaintenancesScreenState extends State<MaintenancesScreen> {
         label: const Text('Nueva Mantención'),
         backgroundColor: const Color(0xFF1A5DB5),
       ),
+    );
+  }
+
+  // ── Selector de cliente ────────────────────────────────────────────────────
+
+  Widget _buildClienteSelector() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _db.collection('clients').orderBy('name').snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox(height: 48);
+        final docs = snap.data!.docs;
+        return Container(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          color: Colors.white,
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String?>(
+              value: _filtroClienteId,
+              isExpanded: true,
+              icon: const Icon(Icons.keyboard_arrow_down),
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('Todos los clientes',
+                      style: TextStyle(fontSize: 14)),
+                ),
+                ...docs.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  return DropdownMenuItem<String?>(
+                    value: doc.id,
+                    child: Text(data['name'] as String? ?? doc.id,
+                        style: const TextStyle(fontSize: 14)),
+                  );
+                }),
+              ],
+              onChanged: (val) => setState(() => _filtroClienteId = val),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -139,6 +182,11 @@ class _MaintenancesScreenState extends State<MaintenancesScreen> {
   // ── Estado vacío ──────────────────────────────────────────────────────────
 
   Widget _buildEmpty() {
+    final mensaje = _filtroClienteId != null
+        ? 'Sin órdenes para este cliente'
+        : _filtroEstado != null
+            ? 'No hay mantenciones ${_filtroEstado!.label.toLowerCase()}'
+            : 'No hay mantenciones registradas';
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -146,9 +194,7 @@ class _MaintenancesScreenState extends State<MaintenancesScreen> {
           Icon(Icons.build_circle_outlined, size: 72, color: Colors.grey[400]),
           const SizedBox(height: 16),
           Text(
-            _filtroEstado != null
-                ? 'No hay mantenciones ${_filtroEstado!.label.toLowerCase()}'
-                : 'No hay mantenciones registradas',
+            mensaje,
             style: TextStyle(fontSize: 15, color: Colors.grey[600]),
           ),
           const SizedBox(height: 20),

@@ -480,69 +480,134 @@ class _FullscreenGalleryState extends State<_FullscreenGallery> {
                   ),
         ],
       ),
-      body: GestureDetector(
-        // Swipe rápido hacia abajo cierra el visor
-        onVerticalDragEnd: (details) {
-          if ((details.primaryVelocity ?? 0) > 600) {
-            Navigator.pop(context);
-          }
-        },
-        child: PageView.builder(
-          controller: _pageController,
-          itemCount: total,
-          onPageChanged: (i) => setState(() => _currentIndex = i),
-          // Web: <img> nativo (sin CORS). Móvil: CachedNetworkImage con zoom.
-          itemBuilder: (_, i) => kIsWeb
-              ? HtmlElementView.fromTagName(
-                  tagName: 'img',
-                  onElementCreated: (Object element) {
-                    (element as dynamic)
-                      ..src = widget.urls[i]
-                      ..setAttribute(
-                        'style',
-                        'max-width:100%;max-height:100%;'
-                        'object-fit:contain;pointer-events:none;',
-                      );
-                  },
-                )
-              : InteractiveViewer(
-                  minScale: 0.5,
-                  maxScale: 5.0,
-                  child: Center(
-                    child: CachedNetworkImage(
-                      imageUrl: widget.urls[i],
-                      fit: BoxFit.contain,
-                      placeholder: (_, __) => const Center(
-                        child: CircularProgressIndicator(
-                            color: Colors.white),
-                      ),
-                      errorWidget: (_, __, ___) => const Center(
-                        child: Icon(Icons.broken_image,
-                            color: Colors.white54, size: 64),
+      // BUG 1: Stack con PageView + flechas de navegación
+      body: Stack(
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onVerticalDragEnd: (details) {
+              if ((details.primaryVelocity ?? 0) > 600) Navigator.pop(context);
+            },
+            // En web, PageView no recibe swipes con HtmlElementView;
+            // GestureDetector los captura y llama _goTo.
+            onHorizontalDragEnd: (kIsWeb && total > 1)
+                ? (details) {
+                    final dx = details.primaryVelocity ?? 0;
+                    if (dx.abs() < 200) return;
+                    _goTo(dx < 0 ? 1 : -1);
+                  }
+                : null,
+            child: PageView.builder(
+              controller: _pageController,
+              // En web desactivamos el scroll interno para que el
+              // GestureDetector capture los swipes sin competencia.
+              physics: kIsWeb ? const NeverScrollableScrollPhysics() : null,
+              itemCount: total,
+              onPageChanged: (i) => setState(() => _currentIndex = i),
+              // Web: <img> nativo (sin CORS). Móvil: CachedNetworkImage con zoom.
+              itemBuilder: (_, i) => kIsWeb
+                  ? HtmlElementView.fromTagName(
+                      tagName: 'img',
+                      onElementCreated: (Object element) {
+                        (element as dynamic)
+                          ..src = widget.urls[i]
+                          ..setAttribute(
+                            'style',
+                            'max-width:100%;max-height:100%;'
+                            'object-fit:contain;pointer-events:none;',
+                          );
+                      },
+                    )
+                  : InteractiveViewer(
+                      minScale: 0.5,
+                      maxScale: 5.0,
+                      child: Center(
+                        child: CachedNetworkImage(
+                          imageUrl: widget.urls[i],
+                          fit: BoxFit.contain,
+                          placeholder: (_, __) => const Center(
+                            child: CircularProgressIndicator(
+                                color: Colors.white),
+                          ),
+                          errorWidget: (_, __, ___) => const Center(
+                            child: Icon(Icons.broken_image,
+                                color: Colors.white54, size: 64),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+            ),
+          ),
+          // Flechas < > (visibles cuando hay más de una foto)
+          if (total > 1) ...[
+            Positioned(
+              left: 8,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _NavArrow(
+                  icon: Icons.chevron_left,
+                  onTap: () => _goTo(-1),
                 ),
-        ),
+              ),
+            ),
+            Positioned(
+              right: 8,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _NavArrow(
+                  icon: Icons.chevron_right,
+                  onTap: () => _goTo(1),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 
+  // Navegación circular entre fotos
+  void _goTo(int delta) {
+    final total = widget.urls.length;
+    final next = (_currentIndex + delta + total) % total;
+    if (kIsWeb) {
+      _pageController.jumpToPage(next);
+    } else {
+      _pageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  // BUG 2: blob download para web (evita que se abra la URL en el navegador)
   Future<void> _saveToDevice(String url) async {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      final ok = await saveToGallery(url);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ok
-              ? kIsWeb
-                  ? 'Descarga iniciada'
-                  : 'Guardado en galería'
-              : 'Error al guardar'),
-          backgroundColor: ok ? Colors.green : Colors.red,
-          duration: const Duration(seconds: 2),
-        ));
+      if (kIsWeb) {
+        final name =
+            'foto_${(_currentIndex + 1).toString().padLeft(3, '0')}.jpg';
+        await downloadSinglePhoto(url, name);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Descarga iniciada'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ));
+        }
+      } else {
+        final ok = await saveToGallery(url);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ok ? 'Guardado en galería' : 'Error al guardar'),
+            backgroundColor: ok ? Colors.green : Colors.red,
+            duration: const Duration(seconds: 2),
+          ));
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -581,6 +646,27 @@ class _FullscreenGalleryState extends State<_FullscreenGallery> {
       if (mounted) setState(() => _sharing = false);
     }
   }
+}
+
+// Flecha de navegación en el visor fullscreen
+class _NavArrow extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _NavArrow({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: const BoxDecoration(
+            color: Colors.black38,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: Colors.white, size: 32),
+        ),
+      );
 }
 
 // Spinner compacto para reemplazar un botón mientras procesa

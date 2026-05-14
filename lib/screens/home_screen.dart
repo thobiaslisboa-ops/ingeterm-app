@@ -158,12 +158,20 @@ class _TaskListTabState extends State<_TaskListTab> {
                 final allDocs = snap.data?.docs ?? [];
 
                 // Filtrar por tecnicoId para técnicos (client-side)
-                final docs = isAdmin
+                final byUser = isAdmin
                     ? allDocs
                     : allDocs.where((d) {
                         final data = d.data() as Map<String, dynamic>;
                         return data['tecnicoId'] == currentUid;
                       }).toList();
+
+                // Solo órdenes activas (programada o enEjecucion)
+                final docs = byUser.where((d) {
+                  final estado =
+                      (d.data() as Map<String, dynamic>)['estado'] as String? ??
+                          '';
+                  return estado == 'programada' || estado == 'enEjecucion';
+                }).toList();
 
                 // Solo las que tienen fechaProgramada
                 final withDate = docs.where((d) {
@@ -183,12 +191,11 @@ class _TaskListTabState extends State<_TaskListTab> {
 
                 // VENCIDAS
                 final vencidas = withDate.where((d) {
-                  final data = d.data() as Map<String, dynamic>;
                   final fecha =
-                      (data['fechaProgramada'] as Timestamp).toDate();
-                  final estado = data['estado'] as String? ?? '';
-                  return fecha.isBefore(_todayStart) &&
-                      estado != 'finalizada';
+                      ((d.data() as Map<String, dynamic>)['fechaProgramada']
+                              as Timestamp)
+                          .toDate();
+                  return fecha.isBefore(_todayStart);
                 }).toList()
                   ..sort(_sortByFecha);
 

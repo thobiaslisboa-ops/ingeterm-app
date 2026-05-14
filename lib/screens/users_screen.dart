@@ -1,9 +1,9 @@
 // lib/screens/users_screen.dart
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
 import '../firebase_options.dart';
 import '../widgets/app_app_bar.dart';
@@ -207,8 +207,7 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
       return;
     }
     if (password.length < 6) {
-      setState(
-          () => _error = 'La contraseña debe tener al menos 6 caracteres');
+      setState(() => _error = 'La contraseña debe tener al menos 6 caracteres');
       return;
     }
 
@@ -217,23 +216,50 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
       _error = null;
     });
 
-    // App secundaria para no cerrar la sesión del admin actual
-    FirebaseApp? secondaryApp;
     try {
-      secondaryApp = await Firebase.initializeApp(
-        name: 'secondary_${DateTime.now().millisecondsSinceEpoch}',
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
-      final cred = await secondaryAuth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
+      // Usar Firebase Auth REST API para no cerrar la sesión del admin actual.
+      // Evita el bug de "configuration-not-found" con apps secundarias en web.
+      final apiKey = DefaultFirebaseOptions.currentPlatform.apiKey;
+      final response = await http.post(
+        Uri.parse(
+          'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$apiKey',
+        ),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+          'returnSecureToken': false,
+        }),
       );
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(cred.user!.uid)
-          .set({
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+
+      if (body.containsKey('error')) {
+        final errMsg =
+            ((body['error'] as Map<String, dynamic>)['message'] as String? ?? '')
+                .toUpperCase();
+        String msg;
+        if (errMsg.contains('EMAIL_EXISTS')) {
+          msg = 'El correo ya está registrado';
+        } else if (errMsg.contains('INVALID_EMAIL')) {
+          msg = 'Correo no válido';
+        } else if (errMsg.contains('WEAK_PASSWORD')) {
+          msg = 'Contraseña muy débil (mínimo 6 caracteres)';
+        } else if (errMsg.contains('OPERATION_NOT_ALLOWED')) {
+          msg = 'El inicio de sesión con email/contraseña no está habilitado en Firebase Console';
+        } else {
+          msg = 'Error al crear usuario: $errMsg';
+        }
+        setState(() {
+          _saving = false;
+          _error = msg;
+        });
+        return;
+      }
+
+      final uid = body['localId'] as String;
+
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'nombre': nombre,
         'apellido': apellido,
         'email': email,
@@ -245,32 +271,11 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
       });
 
       if (mounted) Navigator.pop(context);
-    } on FirebaseAuthException catch (e) {
-      String msg;
-      switch (e.code) {
-        case 'email-already-in-use':
-          msg = 'El correo ya está registrado';
-          break;
-        case 'invalid-email':
-          msg = 'Correo no válido';
-          break;
-        case 'weak-password':
-          msg = 'Contraseña muy débil (mínimo 6 caracteres)';
-          break;
-        default:
-          msg = 'Error al crear usuario: ${e.message}';
-      }
-      setState(() {
-        _saving = false;
-        _error = msg;
-      });
     } catch (e) {
       setState(() {
         _saving = false;
         _error = 'Error inesperado: $e';
       });
-    } finally {
-      await secondaryApp?.delete();
     }
   }
 
